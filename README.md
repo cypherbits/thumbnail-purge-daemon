@@ -1,6 +1,6 @@
 # thumbnail-purge-daemon
 
-`thumbnail-purge-daemon` is a Rust daemon that automatically removes obsolete or unnecessary thumbnail images from your system, helping to keep storage clean and optimize disk space usage.
+`thumbnail-purge-daemon` is a Rust daemon that automatically removes thumbnails from Gnome when the original files are deleted. It helps keep your thumbnail cache clean and saves disk space by removing unused thumbnails. Helping privacy too.
 
 ## Features
 - Monitors thumbnail directories.
