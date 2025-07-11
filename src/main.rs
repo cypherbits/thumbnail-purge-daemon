@@ -8,13 +8,13 @@ use dirs;
 use ini::Ini;
 use mime_guess::get_mime_extensions_str;
 
-/// Calcula el hash MD5 del URI del archivo como lo hace GNOME
+/// Calculates the MD5 hash of the file URI as GNOME does
 fn compute_thumbnail_hash(path: &Path) -> String {
     let uri = format!("file://{}", path.to_string_lossy());
     format!("{:x}", md5::compute(uri))
 }
 
-/// Elimina las miniaturas correspondientes al archivo dado
+/// Removes the thumbnails corresponding to the given file
 fn purge_thumbnail(hash: &str, cache_dir: &Path) {
     for size in &["normal", "large"] {
         let thumb_path = cache_dir.join(size).join(format!("{}.png", hash));
@@ -27,7 +27,7 @@ fn purge_thumbnail(hash: &str, cache_dir: &Path) {
     }
 }
 
-/// Verifica si una extensión está entre las admitidas por los thumbnailers
+/// Checks if an extension is among those supported by thumbnailers
 fn is_thumbnail_candidate(path: &Path, valid_exts: &HashSet<String>) -> bool {
     if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
         valid_exts.contains(&ext.to_lowercase())
@@ -36,18 +36,18 @@ fn is_thumbnail_candidate(path: &Path, valid_exts: &HashSet<String>) -> bool {
     }
 }
 
-/// Maneja un archivo eliminado: purga su thumbnail si aplica
+/// Handles a deleted file: purges its thumbnail if applicable
 fn handle_deleted(path: &Path, cache_dir: &Path) {
     let hash = compute_thumbnail_hash(path);
     purge_thumbnail(&hash, cache_dir);
 }
 
-/// Verifica si un path está dentro del propio directorio de thumbnails
+/// Checks if a path is inside the thumbnail cache directory
 fn is_in_thumbnail_cache(path: &Path, cache_dir: &Path) -> bool {
     path.starts_with(cache_dir)
 }
 
-/// Lee los thumbnailers instalados y extrae las extensiones admitidas
+/// Reads installed thumbnailers and extracts supported extensions
 fn collect_supported_extensions() -> HashSet<String> {
     let mut extensions = HashSet::new();
 
