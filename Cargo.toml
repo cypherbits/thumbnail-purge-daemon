@@ -1,0 +1,35 @@
+[package]
+name = "thumbnail-purge-daemon"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+notify = "5.1"
+md5 = "0.7"
+dirs = "4"
+mime_guess = "2.0"
+rust-ini = "0.21"
+
+
+# Debug profile (development) with maximum optimizations
+[profile.dev]
+opt-level = 3             # Highest optimization level for dev builds
+debug = true              # Keep debug symbols for debugging
+overflow-checks = true    # Enable integer overflow checks
+lto = true                # Enable Link Time Optimization
+codegen-units = 1         # Single codegen unit for better optimizations
+panic = "unwind"         # Unwind on panic for backtraces
+incremental = false       # Disable incremental compilation for consistency
+split-debuginfo = "packed" # Pack debug info separately
+
+# Release profile (production) with all optimizations
+[profile.release]
+opt-level = 3             # Highest optimization level
+debug = false             # No debug symbols
+overflow-checks = false   # Disable overflow checks for performance
+lto = "fat"             # Full Link Time Optimization
+codegen-units = 1         # Single codegen unit for best code generation
+panic = "abort"          # Abort on panic to reduce binary size and improve performance
+incremental = false       # Disable incremental compilation
+split-debuginfo = "unpacked" # Remove debug info from the binary
+strip = "symbols"        # Strip symbols from the final binary
