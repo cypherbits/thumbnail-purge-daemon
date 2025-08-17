@@ -1,0 +1,170 @@
+name: Build and Release Debian Package
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history for tags)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Determinar próxima versión y actualizar Cargo.toml
+        id: version
+        run: |
+          set -euo pipefail
+          # Obtener último tag vX.Y.Z (si existe)
+          LAST_TAG=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || echo "")
+          if [ -n "$LAST_TAG" ]; then
+            BASE_VERSION=${LAST_TAG#v}
+            COMMITS=$(git log --format=%B ${LAST_TAG}..HEAD)
+          else
+            BASE_VERSION=$(grep '^version' Cargo.toml | head -1 | sed -E 's/version = "([0-9]+\.[0-9]+\.[0-9]+)"/\1/')
+            COMMITS=$(git log --format=%B)
+          fi
+          echo "Último tag: ${LAST_TAG:-none}"; echo "Base: $BASE_VERSION"
+          if [ -n "$LAST_TAG" ] && [ -z "${COMMITS// /}" ]; then
+            echo "No hay commits nuevos desde $LAST_TAG."
+            VERSION="$BASE_VERSION"; BUMPED=false
+          else
+            MAJOR=$(echo "$BASE_VERSION" | cut -d. -f1)
+            MINOR=$(echo "$BASE_VERSION" | cut -d. -f2)
+            PATCH=$(echo "$BASE_VERSION" | cut -d. -f3)
+            NORMALIZED=$(echo "$COMMITS" | tr '[:upper:]' '[:lower:]')
+            if echo "$NORMALIZED" | grep -Eq '^[a-z]+\([^)]*\)!:' || echo "$COMMITS" | grep -Eq '^.*!:' || echo "$COMMITS" | grep -qi 'breaking change'; then
+              MAJOR=$((MAJOR+1)); MINOR=0; PATCH=0; REASON="breaking change"
+            elif echo "$NORMALIZED" | grep -E '^(feat|chore|refactor|perf|docs|style|test|ci|build|revert|deps)(\(|: )' >/dev/null || \
+                 (echo "$NORMALIZED" | grep -E '^[a-z]+(\(|: )' | grep -vq '^(fix)(\(|: )'); then
+              MINOR=$((MINOR+1)); PATCH=0; REASON="minor (feat/otros)"
+            elif echo "$NORMALIZED" | grep -E '^(fix)(\(|: )' >/dev/null; then
+              PATCH=$((PATCH+1)); REASON="fix"
+            else
+              MINOR=$((MINOR+1)); PATCH=0; REASON="minor (otros)"
+            fi
+            VERSION="${MAJOR}.${MINOR}.${PATCH}"
+            if git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null; then
+              echo "Advertencia: v$VERSION ya existe; incrementando patch hasta encontrar libre." >&2
+              while git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null; do
+                PATCH=$((PATCH+1)); VERSION="${MAJOR}.${MINOR}.${PATCH}"
+              done
+            fi
+            BUMPED=true; echo "Bump ($REASON) => $VERSION"
+          fi
+          if [ "$BUMPED" = true ]; then
+            cargo install cargo-edit --quiet --locked || true
+            cargo set-version "$VERSION"
+          fi
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "BUMPED=$BUMPED" >> $GITHUB_ENV
+          echo "LAST_TAG=$LAST_TAG" >> $GITHUB_ENV
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "bumped=$BUMPED" >> $GITHUB_OUTPUT
+
+      - name: Build (release)
+        run: cargo build --release --locked
+
+      - name: Install cargo-deb
+        run: cargo install cargo-deb --locked
+
+      - name: Build .deb package
+        run: cargo deb --no-build --quiet
+
+      - name: Generar changelog
+        if: env.BUMPED == 'true'
+        run: |
+          set -euo pipefail
+          RANGE=""
+          if [ -n "${LAST_TAG}" ]; then RANGE="${LAST_TAG}..HEAD"; fi
+          # Extraer commits (excluye merges triviales)
+          git log --format='%s' $RANGE | grep -v '^Merge ' > _commits.txt || true
+          BREAKING=$(grep -Ei '!' _commits.txt || true; git log --format='%b' $RANGE | grep -Ei 'breaking change' || true)
+          FEATS=$(grep -E '^feat(\(|: )' _commits.txt || true)
+          FIXES=$(grep -E '^fix(\(|: )' _commits.txt || true)
+          OTHERS=$(grep -E '^[a-z]+(\(|: )' _commits.txt | grep -Ev '^(feat|fix)(\(|: )' || true)
+          DATE=$(date -u +%Y-%m-%d)
+          {
+            echo "## v$VERSION - $DATE"; echo
+            [ -n "$BREAKING" ] && { echo "### Breaking Changes"; echo "$BREAKING" | sed 's/^/- /'; echo; }
+            [ -n "$FEATS" ] && { echo "### Features"; echo "$FEATS" | sed 's/^/- /'; echo; }
+            [ -n "$FIXES" ] && { echo "### Fixes"; echo "$FIXES" | sed 's/^/- /'; echo; }
+            [ -n "$OTHERS" ] && { echo "### Otros"; echo "$OTHERS" | sed 's/^/- /'; echo; }
+          } > release_notes.md
+          if [ -f CHANGELOG.md ]; then
+            { cat release_notes.md; echo; cat CHANGELOG.md; } > CHANGELOG.new && mv CHANGELOG.new CHANGELOG.md
+          else
+            cp release_notes.md CHANGELOG.md
+          fi
+          echo "Changelog generado para v$VERSION"; head -n 30 release_notes.md
+
+      - name: Capture artifact path
+        id: artifact
+        run: |
+          set -euo pipefail
+          DEB_PATH=$(ls -1 target/debian/*.deb | head -1)
+          echo "deb_path=$DEB_PATH" >> $GITHUB_OUTPUT
+          echo "Found package: $DEB_PATH"
+
+      - name: Commit version bump (if changed)
+        if: env.BUMPED == 'true' && github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          if ! git diff --quiet; then
+            git add Cargo.toml Cargo.lock CHANGELOG.md
+            git commit -m "chore: bump version to $VERSION [CI]"
+            git push origin HEAD:main
+          fi
+
+      - name: Create tag
+        if: env.BUMPED == 'true'
+        run: |
+          git tag "v$VERSION"
+          git push origin "v$VERSION"
+
+      - name: Create GitHub Release
+        if: env.BUMPED == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: v${{ env.VERSION }}
+          draft: false
+          prerelease: false
+          files: ${{ steps.artifact.outputs.deb_path }}
+          body_path: release_notes.md
+        env:
+          GITHUB_TOKEN: ${{ secrets._GITHUB_TOKEN }}
+
+      - name: Upload artifact to workflow (backup)
+        uses: actions/upload-artifact@v4
+        with:
+          name: debian-package-v${{ env.VERSION }}
+          path: ${{ steps.artifact.outputs.deb_path }}
+          if-no-files-found: error
