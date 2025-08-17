@@ -48,7 +48,6 @@ jobs:
         id: version
         run: |
           set -euo pipefail
-          # Obtener último tag vX.Y.Z (si existe)
           LAST_TAG=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || echo "")
           if [ -n "$LAST_TAG" ]; then
             BASE_VERSION=${LAST_TAG#v}
@@ -89,7 +88,6 @@ jobs:
             cargo install cargo-edit --quiet --locked || true
             cargo set-version "$VERSION"
           fi
-          fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "BUMPED=$BUMPED" >> $GITHUB_ENV
           echo "LAST_TAG=$LAST_TAG" >> $GITHUB_ENV
@@ -111,7 +109,6 @@ jobs:
           set -euo pipefail
           RANGE=""
           if [ -n "${LAST_TAG}" ]; then RANGE="${LAST_TAG}..HEAD"; fi
-          # Extraer commits (excluye merges triviales)
           git log --format='%s' $RANGE | grep -v '^Merge ' > _commits.txt || true
           BREAKING=$(grep -Ei '!' _commits.txt || true; git log --format='%b' $RANGE | grep -Ei 'breaking change' || true)
           FEATS=$(grep -E '^feat(\(|: )' _commits.txt || true)
@@ -130,7 +127,6 @@ jobs:
           else
             cp release_notes.md CHANGELOG.md
           fi
-          echo "Changelog generado para v$VERSION"; head -n 30 release_notes.md
 
       - name: Capture artifact path
         id: artifact
@@ -141,15 +137,15 @@ jobs:
           echo "Found package: $DEB_PATH"
 
       - name: Commit version bump (if changed)
-        if: env.BUMPED == 'true' && github.event_name == 'push'
+        if: env.BUMPED == 'true'
         run: |
           set -euo pipefail
           git config user.name "github-actions"
-          git config user.email "github-actions@users.noreply.github.com"
+            git config user.email "github-actions@users.noreply.github.com"
           if ! git diff --quiet; then
             git add Cargo.toml Cargo.lock CHANGELOG.md
             git commit -m "chore: bump version to $VERSION [CI]"
-            git push origin HEAD:main
+            git push origin HEAD:master
           fi
 
       - name: Create tag
