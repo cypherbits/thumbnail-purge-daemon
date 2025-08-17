@@ -33,3 +33,10 @@ panic = "abort"          # Abort on panic to reduce binary size and improve perf
 incremental = false       # Disable incremental compilation
 split-debuginfo = "unpacked" # Remove debug info from the binary
 strip = "symbols"        # Strip symbols from the final binary
+
+[package.metadata.deb]
+assets = [
+    ["target/release/thumbnail-purge-daemon", "usr/local/bin/", "755"],
+    ["debian/thumbnail-purge-daemon.service", "lib/systemd/system/", "644"]
+]
+maintainer-scripts = "debian"

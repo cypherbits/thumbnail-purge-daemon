@@ -1,0 +1,9 @@
+[Unit]
+Description=Thumbnail purge daemon
+
+[Service]
+ExecStart=/usr/local/bin/thumbnail-purge-daemon
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
