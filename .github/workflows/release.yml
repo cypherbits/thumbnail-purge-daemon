@@ -2,8 +2,17 @@ name: Build and Release Debian Package
 
 on:
   push:
-    branches: [ main ]
+    branches: [ master ]
   workflow_dispatch:
+    inputs:
+      force_version:
+        description: 'Forzar versión (ej: 0.1.0). Dejar vacío para auto-bump.'
+        required: false
+      skip_bump:
+        description: 'Usar versión existente sin calcular bump.'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
