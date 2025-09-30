@@ -39,4 +39,5 @@ assets = [
     ["target/release/thumbnail-purge-daemon", "usr/local/bin/", "755"],
     ["debian/thumbnail-purge-daemon.service", "lib/systemd/system/", "644"]
 ]
+maintainer = "cypherbits <cypherbits@localhost>"
 maintainer-scripts = "debian"
