@@ -1,3 +1,9 @@
+## v0.3.0 - 2026-09-28
+
+### Features
+- feat: update dependencies
+
+
 ## v0.2.1 - 2025-09-30
 
 ### Fixes
