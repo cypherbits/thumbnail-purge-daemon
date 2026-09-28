@@ -3,8 +3,6 @@ use std::sync::mpsc::channel;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::fs;
-use md5;
-use dirs;
 use ini::Ini;
 use mime_guess::get_mime_extensions_str;
 
